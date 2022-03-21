@@ -1,0 +1,1023 @@
+   public async Task<IActionResult> Index(int CardNumber, int GameId, string locationName, string Email)
+        {
+            try
+            {
+                var myParams1 = new DynamicParameters();
+                myParams1.Add("@LocationName", locationName);
+                var gameList = await _gameService.GetAllForDisplayByQuery(AppData.usp_GetGameConfig, myParams1).ConfigureAwait(true);
+                var gameView = _mapper.Map<IEnumerable<GameViewModel>>(gameList);
+                if (GameId != 0)
+                {
+                    var game = gameView.Where(x => x.PID == GameId).FirstOrDefault();
+                    ViewBag.casinoLogo = game.CasinologoPath;
+                    ViewBag.gameID = game.PID;
+                    ViewBag.CardNumber = CardNumber;
+                    ViewBag.locationName = locationName;
+                }
+                ViewBag.Email = Email;
+                // coding for dynamic week
+                ViewBag.gamename = gameList.FirstOrDefault().GameName;
+                var myParamsweekstartdateandenddate = new DynamicParameters();
+                myParamsweekstartdateandenddate.Add("@GameName", _appKey.NflWithoutPoints);
+                myParamsweekstartdateandenddate.Add("@category", "");
+                var weekstartdateandenddate = await _gameService.GetAllForDisplayByQuery(AppData.usp_GetWeekdatebygamename, myParamsweekstartdateandenddate).ConfigureAwait(true);
+                //DateTime weekstartdate = DateTime.Today;
+                //DateTime weekenddate = DateTime.Today.AddDays(10);
+                //DateTime weekstartdate = weekstartdateandenddate.FirstOrDefault().StartDate;
+                //DateTime weekenddate = weekstartdateandenddate.FirstOrDefault().EndDate;
+                //var myParamsweekdate = new DynamicParameters();
+                //myParamsweekdate.Add("@weekstartdate", weekstartdate);
+                //myParamsweekdate.Add("@weekenddate", weekenddate);
+                //var weekdate = await _gameService.GetAllForDisplayByQuery(AppData.usp_Getweekapi, myParamsweekdate).ConfigureAwait(true);
+                // week = weekstartdateandenddate.FirstOrDefault().Week;
+                week = 18;
+                // ending for dynamic week
+                week = 8;
+                ViewBag.week = week;
+                TempData["week"] = week;
+                TempData.Peek("week");
+                TempData["weeknew"] = week;
+                TempData.Peek("weeknew");
+                //changes by  2021 replace by 2020
+                string URL = "https://fly.sportsdata.io/v3/nfl/odds/json/GameOddsByWeek/" + _appKey.Season + "/" + week;
+                HttpClient client = new HttpClient();
+                client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", _appKey.APIKey);
+                // Add an Accept header for JSON format.
+                client.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
+                HttpResponseMessage response = client.GetAsync(URL).Result;  // Blocking call! Program will wait here until a response is received or a timeout occurs.
+
+                string responseBody = await response.Content.ReadAsStringAsync();// Blocking call! Program will wait here until a response is received or a timeout occurs
+                                                                                 //var apiResponse = JsonConvert.DeserializeObject<List<PregameOddsModel>>(responseBody);
+                var apiResponse = JsonConvert.DeserializeObject<List<PregameOddsModel>>(responseBody);
+
+
+                List<SchedulesViewModel> model = new List<SchedulesViewModel>();
+                var myParams = new DynamicParameters();
+                myParams.Add("@search_key", week);
+                var displayResult = await _scheduleService.GetAllForDisplayByQuery(AppData.usp_GetCurrentSchedule, myParams).ConfigureAwait(true);
+                var scheduleView = _mapper.Map<IEnumerable<SchedulesViewModel>>(displayResult);
+                foreach (var item in scheduleView)
+                {
+
+                    var objectdata = apiResponse.Where(x => x.GlobalGameId == item.GlobalGameID).FirstOrDefault();
+
+                    
+                    item.AwayPointSpread = 0;
+                    item.HomePointSpread = 0;
+                   
+
+                    TimeZoneInfo tz = TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time");
+                   
+                    DateTime date = TimeZoneInfo.ConvertTime(item.Date.Value, TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time"), tz);
+                    
+                    model.Add(new SchedulesViewModel
+                    {
+                        CardNumber = CardNumber,
+                        GlobalGameID = item.GlobalGameID,
+                        AwayFullName = item.AwayFullName,
+                        AwayTeamLogo = item.AwayTeamLogo,
+                        AwayTeam = item.AwayTeam,
+                        HomeFullName = item.HomeFullName,
+                        HomeTeamLogo = item.HomeTeamLogo,
+                        HomeTeam = item.HomeTeam,
+                        PointSpread = 0,
+                        AwayPointSpread = 0,
+                        HomePointSpread = 0,
+                        Date = date,
+                        Country = item.Country,
+                        GlobalAwayTeamID = item.GlobalAwayTeamID,
+                        GlobalHomeTeamID = item.GlobalHomeTeamID,
+                        ForecastTempLow = item.ForecastTempLow,
+                        ForecastTempHigh = item.ForecastTempHigh,
+                        ForecastDescription = item.ForecastDescription
+                    });
+
+                }
+                return View(model);
+            }
+            catch(Exception ex)
+            {
+                _LogHandler.WriteError(ex);
+                throw ex;
+
+            }
+
+        }
+
+================================================================================================================================
+@model IEnumerable<SchedulesViewModel>
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+    <!-- Bootstrap CSS -->
+    @*<link rel="stylesheet" href="css/bootstrap.min.css" />*@
+    <link href="~/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="~/css/custom.css" rel="stylesheet" />
+    <link href="~/css/custom-second.css" rel="stylesheet" />
+    <link href="~/sweet-alert/sweetalert.css" rel="stylesheet" />
+    <script src="~/js/jquery.min.js"></script>
+    <link href="~/css/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+    <title>Dynamic Database</title>
+    <partial name="_BaseUrl" />
+</head>
+
+<body>
+    <div class="container-fluid main_container">
+        <div class="custom-container">
+            <div class="bg_pic">
+                <!-- start header for menu bar -->
+
+                <section class="header_menu">
+                    <div class="container-fluid">
+
+
+                        <div class="row header_bg_color">
+
+
+                            <!-- header -->
+                            <div class="main_header_div">
+
+                                <div class="footballlogocol">
+                                    <a>
+                                        @if (ViewBag.casinoLogo != null)
+                                        {
+                                            <img src="@Configuration["AdminServerUrlInfo:URL"]/@ViewBag.casinoLogo" class="img-fluid casino_logo" />
+                                        }
+                                        else
+                                        {
+                                            <img src="~/img/Caesars_Logo.png" class="img-fluid casino_logo" />
+                                            // <img src="~/img/Quechan Casino Small.png" class="img-fluid casino_logo" />
+                                        }
+                                    </a>
+                                </div>
+
+                                <div class="header_icon">
+
+                                    <ul class="ulicons d-flex align-items-center">
+                                        <li class="mr-2">
+                                            <a href="">
+                                                <img src="~/icons/home.png" />
+                                            </a>
+                                        </li>
+
+                                        @*<li class="ml-2">
+                                            <a href="">
+                                                <img src="~/icons/logout.png" />
+                                            </a>
+                                        </li>*@
+
+                                    </ul>
+
+                                </div>
+
+                            </div>
+
+
+                        </div>
+
+
+
+                    </div>
+                </section>
+
+                <!-- close header with menu -->
+                <!-- section for team -->
+                <div>
+
+                </div>
+
+                <section class="team_detail mt-3 mb-3">
+                    <div class="container-fluid">
+                        <div class="row team_scroll">
+                            <!-- start box -->
+                            <input type="hidden" value="@ViewBag.CardNumber" id="CardId" />
+                            <input type="hidden" value="@ViewBag.gameID" id="GameId" />
+
+                            @foreach (var item in Model)
+                            {
+                                @if (item.Country == "USA")
+                                {
+                                    @if (item.Date?.ToString("dddd") == "Sunday" || item.Date?.ToString("dddd") == "Monday")
+                                    {
+                                        <div class="col-md-6 mb-2 abc">
+                                            <!-- layout for box -->
+                                            <div class="box_layout">
+                                                <!-- start row for header -->
+                                                <div class="position_label">
+                                                    <div class="row team_header">
+
+                                                        <div class="col-4 col-sm-4 col-md-4 col-lg-4 d-flex justify-content-center align-items-center">
+                                                            <p class="text-white m-0">@item.HomeTeam</p>
+                                                        </div>
+
+                                                        <div class="col-4 col-sm-4 col-md-4 col-lg-4 col-lg-4 d-flex justify-content-center align-items-center">
+                                                            <!-- <p>test2</p> -->
+
+                                                            <div class="heading_support_layer d-flex justify-content-center align-items-center">
+
+                                                                <!-- temperature and cloud -->
+                                                                <div class="div_cloud_temp">
+                                                                    <div class="div_temp">
+                                                                        <p class="margin-text-zero">
+                                                                            <span>@item.ForecastTempLow<sup>o</sup></span><span> / @item.ForecastTempHigh<sup>o</sup></span>
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <div class="div_cloud">
+                                                                        <p class="margin-text-zero text_clouds temp_padding"><span>@item.ForecastDescription</span></p>
+                                                                    </div>
+                                                                </div>
+                                                                <!-- close temperature and cloud -->
+
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="col-4 col-sm-4 col-md-4 col-lg-4 d-flex justify-content-center align-items-center">
+                                                            <p class="text-center text-white m-0">@item.AwayTeam</p>
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+
+                                                <!-- close row for header -->
+                                                <!-- start div for team detail -->
+
+                                                <div class="team_main_div d-flex">
+                                                    <!-- start left team -->
+                                                    <div data-cardNumber="@item.CardNumber" data-scheduleDate="@item.Date" data-pointSpread="@item.HomePointSpread" data-globalGameId="@item.GlobalGameID" data-id="@item.GlobalHomeTeamID" data-away="@item.GlobalAwayTeamID" id="@item.GlobalHomeTeamID" class="common_Text div_left_team chileftdiv w-50 d-flex">
+                                                        <!-- start for center -->
+                                                        <div class="center_div pt-4 pb-4 d-flex align-items-center">
+
+                                                            <div class="player_info">
+                                                                <div class="player player_button" style="height:75px;">
+                                                                    <div class="div_img_team flex-direction-column h-100">
+                                                                        <img src="@item.HomeTeamLogo" class="img_div" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="inner_content flex-direction-column ml-2">
+                                                                <p class="text-grey text-bold pr-2">
+                                                                    <span>@item.HomeFullName</span>
+                                                                    @*@if (item.HomePointSpread > 0)
+                                                                        {
+                                                                            var pointTest = @item.HomePointSpread.ToString().Contains(".0") ? ".5" : "";
+                                                                            <span class="split_text">&#40;&#43;@string.Format("{0:#.#}", item.HomePointSpread)@pointTest&#41;</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            var pointTest = @item.HomePointSpread.ToString().Contains(".0") ? ".5" : "";
+                                                                            <span class="split_text">&#40;@string.Format("{0:#.#}", item.HomePointSpread)@pointTest&#41;</span>}*@
+                                                                    @*Philadelphia Eagles<span>(+3.5)</span>*@
+
+                                                                </p>
+
+                                                                <p class="text-grey">
+                                                                    @item.Date?.ToString("ddd, dd MMM yyyy")
+                                                                    @*Sun 3rd Nov 2021*@
+                                                                </p>
+
+                                                                <p class="text-grey">
+                                                                    @item.Date?.ToString("hh:mm tt") PST
+                                                                    @*1:00:00*@
+                                                                </p>
+                                                            </div>
+
+                                                        </div>
+
+                                                        <!-- close for center -->
+                                                    </div>
+
+                                                    <!-- close left team -->
+                                                    <!-- start right team -->
+
+                                                    <div data-cardNumber="@item.CardNumber" data-scheduleDate="@item.Date" data-pointSpread="@item.AwayPointSpread" data-globalGameId="@item.GlobalGameID" data-id="@item.GlobalAwayTeamID" data-home="@item.GlobalHomeTeamID" id="@item.GlobalAwayTeamID" class="common_Text div_right_team phirightdiv w-50 d-flex">
+                                                        <!-- start for center -->
+                                                        <div class="center_div pt-4 pb-4 d-flex align-items-center">
+                                                            <!-- close for center -->
+                                                            <div class="player_info ">
+                                                                <div class="player player_button" style="height:75px;">
+                                                                    <div class="div_img_team flex-direction-column h-100">
+                                                                        <img src="@item.AwayTeamLogo" class="img_div" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="inner_content flex-direction-column ml-2">
+                                                                <p class="text-grey text-bold pr-2">
+                                                                    <span>@item.AwayFullName</span>  @*@item.AwayPointSpread*@
+                                                                    @*@if (item.AwayPointSpread > 0)
+                                                                        {
+                                                                            var pointTest = @item.AwayPointSpread.ToString().Contains(".0") ? ".5" : "";
+                                                                            <span class="split_text"> &#40;&#43;@string.Format("{0:#.#}", item.AwayPointSpread)@pointTest &#41;   </span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            var pointTest = @item.AwayPointSpread.ToString().Contains(".0") ? ".5" : "";
+                                                                            <span class="split_text">&#40;@string.Format("{0:#.#}", item.AwayPointSpread)@pointTest &#41;</span>
+                                                                        }*@
+                                                                </p>
+
+                                                                <p class="text-grey">
+                                                                    @item.Date?.ToString("ddd, dd MMM yyyy")
+                                                                    @*Sun 3rd Nov 2021*@
+                                                                </p>
+
+                                                                <p class="text-grey">
+                                                                    @item.Date?.ToString("hh:mm tt") PST
+                                                                    @*1:00:00*@
+                                                                </p>
+                                                            </div>
+
+                                                        </div>
+
+
+                                                    </div>
+
+                                                    <!-- close right team -->
+                                                </div>
+
+                                                <!-- close div for for team detail -->
+                                            </div>
+
+                                            <!-- close layout for box -->
+                                        </div>
+                                    }
+
+
+                                }
+                            }
+
+
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- close section for team -->
+                <!-- start section for footer -->
+
+                <section class="footer_section">
+                    <div class="container-fluid footer_layer">
+                        <div class="footer_buttons_layer pt-2 pb-2">
+                            <ul class="footer_ul">
+                                <li class="footer_li">
+                                    <button class="btnfootercancel" onclick="TeamReset()">
+                                        <span class="text-white word_break">Reset</span>
+                                    </button>
+                                </li>
+
+                                <li class="footer_li">
+                                    <button class="btnfooterhistory" onclick="showInPopupnflwithnopoints(this)">
+                                        <span class="text-white word_break">History</span>
+                                    </button>
+                                </li>
+
+                                <li class="footer_li">
+                                    <button class="btnfooterhelp" data-toggle="modal" data-target="#helpmodelnflwithoutpoints">
+                                        <span class="text-white word_break">Help</span>
+                                    </button>
+                                </li>
+
+                                <li class="footer_li">
+                                    <button onclick="myFunction()" id="btnSave" class="btnfootquickpick" data-toggle="modal" data-target="#quickpickmodel">
+                                        <span class="text-white word_break">Quickpick</span>
+
+                                    </button>
+                                </li>
+
+                                <li class="footer_li">
+                                    <button type="button" onclick="SubmitTieBreker()" class="btnfootersubmit">
+                                        <span class="text-white">Next</span>
+                                    </button>
+
+                                </li>
+
+                            </ul>
+
+                        </div>
+                    </div>
+                </section>
+
+                <!-- close section for footer -->
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- models start -->
+    <!-- help model -->
+    <div class="modal" tabindex="-1" role="dialog" id="helpmodelnflwithoutpoints" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header help_header">
+                    <h5 class="modal-title text-white popup-heading">HELP</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <!--   <span aria-hidden="true" class="text-white "></span> -->
+                        <img src="~/icons/Cancel.svg" class="cancel_button" />
+                    </button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="help_body_content popup_scroll_content">
+                        <h4>HOW DO I PLAY?</h4>Each week during the season, you’ll be presented with a selection of games taking place based on the rules of this promotion. Your goal is to correctly predict the winner of each game listed for that week. <br><br>You will receive one point for each correct prediction and zero points for each incorrect prediction or game that ends in a tie. Check the official rules for any postponed or cancelled games.
+                        <br><br>You earn 1 point for each correct prediction and 0 points for each wrong selection or for any game that ends in a tie. Check the official rules for any postponed or canceled games.
+                        <br /><br />After picking all the teams that you think will win for that week, you’ll be asked to enter the total COMBINED score for the designated tie-breaker game of the week
+                        <br /><br />Players can play for free ONCE per day, giving you up to 7 chances per week to win cash and/or prizes.
+                        <br /><br />Your highest scoring ticket each week will be used for weekly and season-ending prizes
+                        <br><br>Casino management decisions on any dispute are FINAL <br><br><br><br><br>
+
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+    </div>
+    <!--<div class="modal" tabindex="-1" role="dialog" id="helpmodelnflwithoutpoints">
+        <div class="modal-dialog modal-lg" role="document" Player History
+            <div class="modal-content">
+
+                <div class="modal-header help_header how_to_play_header">
+                    <h5 class="modal-title text-white popup-heading how_to_play_heading">HELP</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">-->
+    <!--   <span aria-hidden="true" class="text-white "></span> -->
+    <!--<img src="~/icons/Cancel.svg" class="cancel_button" />
+
+                    </button>
+                </div>
+
+
+                <div class="modal-body">
+
+                    <div class="help_body_content popup_scroll_content">
+
+                        <h4>HOW DO I PLAY?</h4>Each week, you'll be presented with a selection of games taking place based on the rules stated for this promotion. Your goal is to correctly predict the winning team in each game. <br><br>You will receive one point for each correct prediction and zero points for each incorrect prediction or game that ends in a tie. Check the official rules for any postponed or cancelled games. <br><br>After predicting the winner in each game, you will be asked to enter the total combined score of a designated tie breaker game for that week. <br><br>Your top scoring ticket will be used for your weekly entry into the contest and the season-long contest. <br><br><br><br><br>
+                        <p>
+
+                        </p>
+
+
+                    </div>
+
+                </div>
+
+
+
+            </div>
+
+
+        </div>
+    </div>-->
+    <!-- close help model -->
+    <!-- start quickpick model -->
+
+
+    <div class="modal" tabindex="-1" role="dialog" id="quickpickmodel" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header help_header">
+                    <h5 class="modal-title text-white popup-heading">Tie Breaker</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <!--   <span aria-hidden="true" class="text-white "></span> -->
+                        <img src="~/icons/Cancel.svg" class="cancel_button" />
+                    </button>
+                </div>
+
+
+                <div class="modal-body">
+                    <div class="tie_breaker_body_content">
+                        @*<div class="quickpick_body_content">*@
+
+                        <p class="popup_text_heading text-center">
+                            @foreach (var item in Model.Reverse().Take(1))
+                            {
+
+                            <p class="text-center">
+                                How Many Total Points Scored Between @item.HomeTeam <span>&#64;</span> @item.AwayTeam -@item.Date
+                            </p>
+                        }
+
+                            <form name="calculator">
+                                <!-- start text area -->
+                                <div class="row">
+                                    <div class="col-lg-2"></div>
+
+                                    <div class="col-12 col-sm-12 col-md-12 col-lg-8 col_div_btn">
+                                        <!--inner button content start -->
+                                        <!--calculator buttons -->
+
+                                        <div class="calculator_btn_groups mt-2 mb-2">
+                                            <!-- row for text area -->
+                                            <div class="row tibreaker_textarea_row">
+                                                @foreach (var item in Model.Reverse().Take(1))
+                                                {
+                                                    <input type="hidden" value="@item.GlobalGameID" id="tieBreakerGlobalGameID" />
+                                                    <input type="hidden" value="@item.GlobalAwayTeamID" id="tieBreakerAwayTeamID" />
+                                                    <input type="hidden" value="@item.GlobalHomeTeamID" id="tieBreakerHomeTeamID" />
+                                                    <input type="hidden" value="@item.HomePointSpread" id="tieBreakerHomePointSpread" />
+                                                    <input type="hidden" value="@item.AwayPointSpread" id="tieBreakerAwayPointSpread" />
+                                                }
+
+                                                <div class="form-group">
+                                                    <input type="text" maxlength="2" name="ans" value="" class="form-control output_textarea outplaceholder" id="exampleFormControlInput1" placeholder="Please enter total points" />
+                                                </div>
+                                            </div>
+
+                                            <!-- close row for text area -->
+                                            <!-- start first row -->
+                                            <div class="row_calculator_btn mt-1">
+                                                <div class="d-flex justify-content-center justify-content-between">
+                                                    <ul class="ultiebreaker justify-content-between">
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="7" onClick="document.calculator.ans.value+='7'">
+                                                                <span class="text-white text_tibreaker_btn">7</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="8" onClick="document.calculator.ans.value+='8'">
+                                                                <span class="text-white text_tibreaker_btn">8</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="9" onClick="document.calculator.ans.value+='9'">
+                                                                <span class="text-white text_tibreaker_btn">9</span>
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            <!-- close first row -->
+                                            <!-- start second row -->
+
+                                            <div class="row_calculator_btn">
+                                                <div class="d-flex justify-content-center">
+                                                    <ul class="ultiebreaker">
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="4" onClick="document.calculator.ans.value+='4'">
+                                                                <span class="text-white text_tibreaker_btn">4</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="5" onClick="document.calculator.ans.value+='5'">
+                                                                <span class="text-white text_tibreaker_btn">5</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="6" onClick="document.calculator.ans.value+='6'">
+                                                                <span class="text-white text_tibreaker_btn">6</span>
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            <!-- close second row -->
+                                            <!-- start third row -->
+
+                                            <div class="row_calculator_btn">
+                                                <div class="d-flex justify-content-center">
+                                                    <ul class="ultiebreaker">
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="1" onClick="document.calculator.ans.value+='1'">
+                                                                <span class="text-white text_tibreaker_btn">1</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="2" onClick="document.calculator.ans.value+='2'">
+                                                                <span class="text-white text_tibreaker_btn">2</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="3" onClick="document.calculator.ans.value+='3'">
+                                                                <span class="text-white text_tibreaker_btn">3</span>
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            <!-- close third row -->
+                                            <!-- start fourth row -->
+
+                                            <div class="row_calculator_btn">
+                                                <div class="d-flex justify-content-center">
+                                                    <ul class="ultiebreaker">
+                                                        <li class="li_tiebreaker">
+                                                            <button type="reset" class="button_tiebreaker">
+                                                                <span class="text-white text_tibreaker_btn">CLEAR</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" class="button_tiebreaker" value="0" onClick="document.calculator.ans.value+='0'">
+                                                                <span class="text-white text_tibreaker_btn">0</span>
+                                                            </button>
+                                                        </li>
+
+                                                        <li class="li_tiebreaker">
+                                                            <button type="button" onclick="OpenModelPop()" class="text_tibreaker_btn_enter" data-toggle="modal" data-target="#allticket">
+                                                                <span class="text-white text_tibreaker_btn">ENTER</span>
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            <!-- close fourth row -->
+                                        </div>
+
+                                        <!-- close calculator buttons -->
+                                        <!-- close button inner content -->
+                                    </div>
+
+                                    <div class="col-lg-2"></div>
+                                </div>
+                            </form>
+
+                            <!-- close center all buttons -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- close quickpick model -->
+        <!-- how to play popup -->
+        <!-- NFL no point -->
+        <div class="modal" tabindex="-1" role="dialog" id="howtoplaymodel" data-backdrop="static">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+
+
+                    <div class="modal-header how_to_play_header">
+                        <h5 class="modal-title text-white how_to_play_heading">HOW TO PLAY</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+
+                            <img src="~/icons/Cancel.svg" class="cancel_button cancel_btn_howtoplay" />
+                        </button>
+                    </div>
+
+                    <div class="modal-body d-flex align-items-center">
+                        <div class="howtoplay_body_content mt-2 mb-2">
+
+
+                            <ul>
+                                <li>
+                                    <p class="text-grey">
+                                        Predict the winning team for each game on this week’s schedule.
+                                    </p>
+                                </li>
+
+                                <li>
+                                    <p class="text-grey">
+                                        Earn 1 point for each winning selection and 0 points for each losing selection.
+                                    </p>
+                                </li>
+                                <li>
+                                    <p class="text-grey">
+                                        Play once per day to increase your chances of winning weekly and season-ending prizes.
+                                    </p>
+                                </li>
+                                <li>
+                                    <p class="text-grey">
+                                        Only your top scoring ticket for the week will be used for weekly and season-ending prizes.
+                                    </p>
+                                </li>
+                            </ul>
+
+                            <div class="buttons_how_to_play">
+                                <button class="letsplaybtn" data-dismiss="modal" aria-label="Close">
+                                    <span class="text-white text_let_play cancel_button">LET'S PLAY</span>
+                                </button>
+
+
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- close how to play popup -->
+        <!-- submit ticket -->
+
+        <div class="modal bd-example-modal-lg" tabindex="-1" role="dialog" id="submitticket" data-backdrop="static" data-keyboard="false">
+            <div class="modal-dialog modal-md" role="document">
+                <div class="modal-content">
+                    <div class="modal-header help_header">
+                        <h5 class="modal-title text-white popup-heading">Submit Ticket</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+
+                            <img src="~/icons/Cancel.svg" class="cancel_button" />
+                        </button>
+                    </div>
+
+                    <!-- start model body -->
+                    <div class="modal-body">
+                        <!-- content start -->
+
+                        <div class="div_submit_ticket_content text-center pt-3 pb-3">
+                            <p class="popup_text_heading text-center">
+                                Are you sure you would like to submit this ticket?
+                            </p>
+
+
+
+                            <div class="button_submit_ticket_groups text-center">
+
+                                <button class="submit_ticket_btn mt" onclick="SaveSubmitTicketnflwithoutpoints(this)" id="SaveSubmitTicketnflwithoutpoints_id">
+                                    <span class="text-white">Submit Ticket</span>
+                                </button>
+
+                                <button class="edit_ticket_btn mt-4" onclick="EditTicket()">
+                                    <span class="text-white">Edit Picks</span>
+                                </button>
+
+                                <button class="exit_ticket_btn mt-4" onclick="Exsit()">
+                                    <span class="text-white">Exit Game</span>
+                                </button>
+
+                            </div>
+
+
+
+
+                        </div>
+
+                        <!-- close content -->
+                    </div>
+                    <!-- close model body -->
+
+
+                </div>
+            </div>
+        </div>
+
+        <!-- close submit ticket -->
+        <!-- close models -->
+        <!-- Optional JavaScript -->
+        <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+        <script src="~/js/popper.min.js"></script>
+        @*<script src="~js/bootstrap.min.js"></script>*@
+        <script src="~/sweet-alert/sweetalert.js"></script>
+        <script src="~/js/custom-second.js"></script>
+        <script src="~/custom-js/Player.js"></script>
+        <!-- Data Table JS -->
+        <script src="~/js/jquery.dataTables.min.js"></script>
+        <script src="~/js/dataTables.responsive.min.js"></script>
+
+
+        @*<script src="js/popper.min.js"></script>
+            <script src="js/bootstrap.min.js"></script>
+
+            <script src="js/custom-second.js"></script>*@
+
+
+
+        <script>
+            $(window).on("load", function () {
+                $("#howtoplaymodel").modal("show");
+            });
+            function myFunction() {
+                
+                //$('.chileftdiv').length
+                var position_count = document.getElementsByClassName('position_label').length;
+                // console.log('position_count: ' + position_count);
+                $('.chileftdiv').each(function () {
+                    $(this).removeClass('selectedTeam');
+                    $(this).removeClass('unSelectedTeam');
+                    $(this).css({ "background-color": "#DEDCDC" });
+                });
+
+                $('.phirightdiv').each(function () {
+                    $(this).removeClass('selectedTeam');
+                    $(this).removeClass('unSelectedTeam');
+                    $(this).css({ "background-color": "#DEDCDC" });
+                });
+
+                for (var i = 0; i < position_count; i++) {
+                    var position_container = document.getElementsByClassName('position_label')[i].parentNode;
+                    var player_count = position_container.getElementsByClassName('player_button').length;
+                    console.log('player_count: ' + player_count);
+                    var rand = Math.floor(Math.random() * player_count);
+                    console.log('rand: ' + rand + ' : ' + player_count);
+                    which_element = position_container.getElementsByClassName('player_button')[rand];
+                    console.log(which_element);
+                    quickpick_players(which_element);
+                }
+            }
+            function quickpick_players(which_element) {
+                
+                var this_element = which_element;
+                var classname = this_element.parentNode.parentNode.parentNode.getElementsByClassName("player_info");
+                //console.log(classname);
+
+
+                for (var i = 0; i < classname.length; i++) {
+
+
+                    $(this_element.parentNode.parentNode.parentNode).css({ "background-color": "#9bd0ef" });
+
+                    $(this_element.parentNode.parentNode.parentNode).addClass('selectedTeam');
+                    //$(this_element.parentNode.parentNode.parentNode).addClass('Random_Selected')
+
+                    this_element.parentNode.classList.add('selected_player');
+                }
+                var TeamName = this_element.parentNode.parentNode.getAttribute('data-player_name');
+                console.log(TeamName, "Quick");
+
+            }
+
+
+        </script>
+
+
+
+        <div class="modal fade" id="exampleModalCenter1" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="exampleModalLongTitle">Player History</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="divModalPopupBody1">
+
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- history modal -->
+
+        <div class="modal" tabindex="-1" role="dialog" id="exampleModalCenter" data-backdrop="static" data-keyboard="false">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header help_header">
+                        <h5 class="modal-title text-white popup-heading">Player History</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <!--   <span aria-hidden="true" class="text-white "></span> -->
+                            <img src="~/icons/Cancel.svg" class="cancel_button" />
+                        </button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <div class="help_body_content popup_scroll_content">
+                            <!-- start table -->
+                            <div id="divModalPopupBody"></div>
+                            <!-- close table -->
+
+                        </div>
+                    </div>
+
+
+                </div>
+            </div>
+        </div>
+
+        <!-- close history modal -->
+        <!--<div class="modal" tabindex="-1" role="dialog" id="exampleModalCenter">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+
+                    <div class="modal-header help_header">
+                        <h5 class="modal-title text-white popup-heading">Player History</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">-->
+        <!--   <span aria-hidden="true" class="text-white "></span> -->
+        <!--<img src="~/icons/Cancel.svg" class="cancel_button" />
+
+                        </button>
+                    </div>
+
+
+                    <div class="modal-body" id="divModalPopupBody">
+
+
+
+                    </div>
+                </div>
+
+
+            </div>
+        </div>-->
+
+
+    </body>
+</html>
+
+
+<script>
+    function SaveSubmitTicketnflwithoutpoints(obj) {
+
+        //alert();
+        var ids = [];
+        var globalTeamids = [];
+        var cardNumbers = [];
+        var pointSpreads = [];
+        var scheduleDate = [];
+        $(".chileftdiv").each(function () {
+            if ($(this).hasClass('selectedTeam')) {
+                ids.push(this.id);
+                globalTeamids.push($(this).attr('data-globalGameId'))
+                cardNumbers.push($(this).attr('data-cardNumber'))
+                pointSpreads.push($(this).attr('data-pointSpread'))
+                scheduleDate.push($(this).attr('data-scheduleDate'))
+            }
+        });
+        $(".phirightdiv").each(function () {
+            if ($(this).hasClass('selectedTeam')) {
+                ids.push(this.id);
+                globalTeamids.push($(this).attr('data-globalGameId'))
+                cardNumbers.push($(this).attr('data-cardNumber'))
+                pointSpreads.push($(this).attr('data-pointSpread'))
+                scheduleDate.push($(this).attr('data-scheduleDate'))
+            }
+        });
+
+        var submitArr = [];
+        for (var i = 0; i < ids.length; i++) {
+            var submitObj = {
+                GameId: parseInt($('#GameId').val()),
+                CardNumber: parseInt($('#CardId').val()),
+                GlobalGameId: parseInt(globalTeamids[i]),
+                SelectedTeamId: parseInt(ids[i]),
+                SelectedTeamPointSpread: pointSpreads[i],
+                TotalPoints: parseInt($('#exampleFormControlInput1').val()),
+                ScheduleDate: scheduleDate[i],
+                TieBreakerGlobalGameID: parseInt($('#tieBreakerGlobalGameID').val()),
+                TieBreakerAwayTeamID: parseInt($('#tieBreakerAwayTeamID').val()),
+                TieBreakerHomeTeamID: parseInt($('#tieBreakerHomeTeamID').val()),
+                TieBreakerHomePointSpread: $('#tieBreakerHomePointSpread').val(),
+                TieBreakerAwayPointSpread: $('#tieBreakerAwayPointSpread').val()
+            }
+            submitArr.push(submitObj);
+        }
+        console.log(submitArr)
+        //alert(JSON.stringify(submitArr))
+        $(obj).attr('disabled', 'disabled');
+        
+        $.ajax({
+            url: `${baseUri}/NFLWithoutPoints/SaveTicket`,
+            type: 'POST',
+            data: { playerHistoryCreateModels: submitArr },
+            dataType: 'Json',
+            async: false,
+            success: function (response) {
+                
+                //$('#submitticket').modal('hide');
+                //swal("Success", "Successfully Submited Ticket", "success")
+                var locationName = '@ViewBag.locationName';
+               // window.location = `${baseUri}/NFLWithoutPoints/Print?locationName=` + locationName + '&printrecords'= ''+'&week'= '@ViewBag.week' ;
+                window.location = `${baseUri}/NFLWithoutPoints/Print/?locationName=` + locationName + "&Email=" + '@ViewBag.Email' + "&week=" + '@ViewBag.week'
+              //  window.location = `${baseUri}/NFLWithoutPoints/Print`;
+                //window.print();
+                //swal("", response.message, "success")
+
+
+
+            },
+            error: function (response) {
+                swal("Error", "An error has occured!", "error")
+                 $('#SaveSubmitTicketnflwithoutpoints_id').removeAttr('disabled');
+            }
+        });
+
+
+    }
+
+    function Exsit() {
+
+         var locationName = '@ViewBag.locationName';
+        window.location = `/Home/Index?locationName=` + locationName;
+    }
+
+    $(document).ready(function () {
+        $('#SaveSubmitTicketnflwithoutpoints_id').removeAttr('disabled'); //re-enable on document ready
+    });
+
+</script>
