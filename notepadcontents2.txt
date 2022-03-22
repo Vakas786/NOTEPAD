@@ -1,0 +1,92 @@
+      public async Task Save_Hockey_Schedules()
+        {
+            NHL = new NHL_Hockey_Data_Services();
+            string URL = System.Configuration.ConfigurationManager.AppSettings["APIUrl_Hockey"].ToString() + "/Games/" + System.Configuration.ConfigurationManager.AppSettings["SeasonHockey"].ToString();
+
+            HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", System.Configuration.ConfigurationManager.AppSettings["Key_Hockey"].ToString());
+            // Add an Accept header for JSON format.
+            client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // List data response.
+            try
+            {
+                // List data response.
+                HttpResponseMessage response = client.GetAsync(URL).Result;  // Blocking call! Program will wait here until a response is received or a timeout occurs.
+                if (response.IsSuccessStatusCode)
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync();// Blocking call! Program will wait here until a response is received or a timeout occurs
+                    var HockeyScheduleList = JsonConvert.DeserializeObject<List<NHL_Hockey_Schedules_Model>>(responseBody);
+                    NHL.NHLHockeySchedule(HockeyScheduleList);
+                }
+                else
+                {
+                    //Console.WriteLine("{0} ({1})", (int)response.StatusCode, response.ReasonPhrase);
+                }
+
+                client.Dispose();
+            }
+            catch (Exception ex)
+            {
+
+                throw ex;
+            }
+        }
+
+  public void NHLHockeySchedule(List<NHL_Hockey_Schedules_Model> modellist)
+        {
+            tbl_NHL_Hockey_Schedules model = null;
+            using (Entities db = new Entities())
+            {
+                foreach (var item in modellist)
+                {
+                    var chk = db.tbl_NHL_Hockey_Schedules.Where(x => x.GameID == item.GameID && x.Season == item.Season).FirstOrDefault();
+                    if (chk == null)
+                    {
+                        model = new tbl_NHL_Hockey_Schedules();
+                        model.GameID = item.GameID;
+                        model.Season = item.Season;
+                        model.SeasonType = item.SeasonType;
+                        model.Status = item.Status;
+                        model.Day = item.Day;
+                        model.DateTime = item.DateTime;
+                        model.Updated = item.Updated;
+                        model.IsClosed = item.IsClosed.ToString();
+                        model.AwayTeam = item.AwayTeam;
+                        model.HomeTeam = item.HomeTeam;
+                        model.AwayTeamID = item.AwayTeamID;
+                        model.HomeTeamID = item.HomeTeamID;
+                        model.StadiumID = item.StadiumID;
+                        model.Channel = item.Channel;
+                        model.Attendance = (string)item.Attendance;
+                        model.AwayTeamScore = item.AwayTeamScore;
+                        model.HomeTeamScore = item.HomeTeamScore;
+                        model.Period = (string)item.Period;
+                        model.TimeRemainingMinutes = (int?)item.TimeRemainingMinutes;
+                        model.TimeRemainingSeconds = (int?)item.TimeRemainingSeconds;
+                        model.AwayTeamMoneyLine = item.AwayTeamMoneyLine;
+                        model.HomeTeamMoneyLine = item.HomeTeamMoneyLine;
+                        model.PointSpread = (decimal?)item.PointSpread;
+                        model.OverUnder = (decimal?)item.OverUnder;
+                        model.GlobalGameID = item.GlobalGameID;
+                        model.GlobalAwayTeamID = item.GlobalAwayTeamID;
+                        model.GlobalHomeTeamID = item.GlobalHomeTeamID;
+                        model.PointSpreadAwayTeamMoneyLine = item.PointSpreadAwayTeamMoneyLine;
+                        model.PointSpreadHomeTeamMoneyLine = item.PointSpreadHomeTeamMoneyLine;
+                        model.LastPlay = (string)item.LastPlay;
+                        model.GameEndDateTime = item.GameEndDateTime;
+                        model.HomeRotationNumber = item.HomeRotationNumber;
+                        model.AwayRotationNumber = item.AwayRotationNumber;
+                        model.NeutralVenue = (string)item.NeutralVenue;
+                        model.OverPayout = item.OverPayout;
+                        model.UnderPayout = item.UnderPayout;
+                        model.DateTimeUTC = item.DateTimeUTC;
+
+
+                        db.tbl_NHL_Hockey_Schedules.Add(model);
+                        db.SaveChanges();
+                    }
+                }
+            }
+        }
